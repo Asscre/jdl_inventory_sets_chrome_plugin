@@ -143,9 +143,10 @@
         sendResponse({ ok: false, error: 'NO_INPUTS' });
         return;
       }
-      if (msg.payload?.mode === 'average') {
-        const arr = averagePositiveIntegers(n);
-        applyValues(arr);
+    if (msg.payload?.mode === 'average') {
+      const extra = msg.payload?.keepReserve ? 1 : 0;
+      const arr = averagePositiveIntegers(n + extra).slice(0, n);
+      applyValues(arr);
         sendResponse({ ok: true, mode: 'average', values: arr });
         return;
       }

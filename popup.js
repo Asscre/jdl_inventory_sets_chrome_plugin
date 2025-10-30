@@ -122,8 +122,9 @@ document.getElementById('applyBtn').addEventListener('click', async () => {
     }
   } else {
     // 平均分配：优先消息，失败则直接执行
+    const keepReserve = !!document.getElementById('keepReserve')?.checked;
     const ok = await chrome.tabs
-      .sendMessage(tab.id, { type: 'APPLY_DISTRIBUTION', payload: { mode } })
+      .sendMessage(tab.id, { type: 'APPLY_DISTRIBUTION', payload: { mode, keepReserve } })
       .then(() => true)
       .catch(() => false);
     if (!ok) {
@@ -133,37 +134,44 @@ document.getElementById('applyBtn').addEventListener('click', async () => {
           func: () => Array.from(document.querySelectorAll('input.distrbutionInput.rateInput')).length,
         })
         .catch(() => []);
-      // 计算每个frame的平均分配并分别写入
+      // 全局平均：先构造总数组，再按frame切片写入；若勾选保留库存，则多一个名额（最后一个）不写入
+      const total = (countsPerFrame || []).reduce((s, r) => s + (r?.result || 0), 0);
+      const globalN = keepReserve ? total + 1 : total;
+      const globalVals = (() => {
+        function averagePositiveIntegers(n) {
+          if (n <= 0) return [];
+          const base = Math.floor(100 / n);
+          const remain = 100 - base * n;
+          const arr = Array.from({ length: n }, () => Math.max(1, base));
+          for (let i = 0; i < remain; i++) arr[i % n] += 1;
+          let sum = arr.reduce((a, b) => a + b, 0);
+          if (sum !== 100) {
+            let delta = sum - 100;
+            let k = arr.length - 1;
+            while (delta > 0 && k >= 0) {
+              const can = Math.min(delta, arr[k] - 1);
+              if (can > 0) { arr[k] -= can; delta -= can; }
+              k -= 1;
+            }
+          }
+          return arr;
+        }
+        return averagePositiveIntegers(globalN);
+      })();
+      let cursor = 0;
       for (const frame of countsPerFrame) {
         const frameCount = frame?.result || 0;
         if (!frameCount) continue;
+        const slice = globalVals.slice(cursor, cursor + frameCount);
+        cursor += frameCount;
         await chrome.scripting.executeScript({
           target: { tabId: tab.id, frameIds: [frame.frameId] },
-          args: [frameCount],
-          func: (n) => {
-            function averagePositiveIntegers(m) {
-              if (m <= 0) return [];
-              const base = Math.floor(100 / m);
-              const remain = 100 - base * m;
-              const arr = Array.from({ length: m }, () => Math.max(1, base));
-              for (let i = 0; i < remain; i++) arr[i % m] += 1;
-              let sum = arr.reduce((a, b) => a + b, 0);
-              if (sum !== 100) {
-                let delta = sum - 100;
-                let k = arr.length - 1;
-                while (delta > 0 && k >= 0) {
-                  const can = Math.min(delta, arr[k] - 1);
-                  if (can > 0) { arr[k] -= can; delta -= can; }
-                  k -= 1;
-                }
-              }
-              return arr;
-            }
+          args: [slice],
+          func: (vals) => {
             const inputs = Array.from(document.querySelectorAll('input.distrbutionInput.rateInput'));
-            const vals = averagePositiveIntegers(n);
             for (let i = 0; i < inputs.length; i++) {
               const el = inputs[i];
-              el.value = String(vals[i]);
+              el.value = String(vals[i] ?? 0);
               el.dispatchEvent(new Event('input', { bubbles: true }));
               el.dispatchEvent(new Event('change', { bubbles: true }));
               if (typeof el.onblur === 'function') {
