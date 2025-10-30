@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "JDL 组套商品分配助手",
+  "version": "1.0.0",
+  "description": "在页面上批量填写组套商品比例分配，总和100且为正整数。",
+  "action": {
+    "default_title": "分配助手",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
+
+
